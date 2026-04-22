@@ -1,46 +1,15 @@
 ---
 name: semantic-trap-detector
-description: "Detect and fix semantic traps in Claude Skills that cause LLM hallucinations. Use for testing skills, optimizing prompts, improving skill accuracy, fixing skill hallucinations, LLM output quality, and prompt engineering."
+description: "Scan Claude Skill instructions for ambiguous word choices that cause LLM hallucinations, identify high-risk phrasing using a semantic trap lexicon, and rewrite problematic sections with narrow-boundary replacements. Use when debugging skill prompts that produce incorrect outputs, reducing hallucination in skill responses, auditing skill wording for semantic drift, or hardening skill constraints against output leakage."
 ---
 
 # 语义陷阱检测器 (Semantic Trap Detector)
 
 ## 概述
 
-语义陷阱检测器是一个专门用于检测和优化其他 Claude Skills 的元 Skill。它基于**语义陷阱理论**——即在大模型认知空间中，某些在日常语境下含义相近的词汇对，其语义边界（激活范围）存在巨大差异。使用语义边界过宽的词汇会导致大模型突破 Prompt 约束，产生幻觉输出。
+检测 Skill 中导致 LLM 幻觉的词汇选择问题。某些词汇对在日常语境中含义相近，但在 LLM 语义空间中激活范围差异巨大（如 "漏洞" vs "风险" 导致 27个百分点的准确率差异）。本检测器通过四步工作流识别高风险词汇和结构模式，提供替换建议和边界锚定策略。
 
-本检测器通过系统化的四步工作流，自动识别 Skill 中的高风险词汇和结构模式，并提供具体的替换建议和边界锚定策略。
-
----
-
-## 核心理论
-
-### 什么是语义陷阱？
-
-**语义陷阱**（Semantic Trap）：在人类日常语境中含义相近，但在大模型的语义空间中激活范围（即语义边界）存在巨大差异的词汇对。
-
-示例：
-- "漏洞" vs "风险" → 在实验中导致 **27个百分点** 的准确率差异（89.3% vs 62.1%）
-- "检查" vs "审查" → 前者触发客观判定，后者触发主观评价
-- "列出" vs "描述" → 前者输出结构化条目，后者触发解释和评论
-
-### LLM 语义敏感度矩阵
-
-```
-            边界清晰度
-            高 ←————→ 低
-        ┌───────────────────┐
- 低    │  漏洞  缺陷  错误  │  ← 安全区
- ↑     │  检查  列出  要求  │
- 发    │─────────────────── │
- 散    │  总结  问题  审查  │
- 倾    │  建议  分析  风险  │  ← 危险区
- 向    │  异常  评估  描述  │
- ↓     └───────────────────┘
- 高
-```
-
-**关键洞察**：词汇选择比 Prompt 结构更根本。如果"砖块"（词汇）本身会膨胀，再精良的"围墙"（工作流）也会被撑破。
+完整词典和锚定策略见 [semantic-trap-lexicon.md](semantic-trap-lexicon.md)。测试用例见 [test-cases.md](test-cases.md)。
 
 ---
 
@@ -189,37 +158,14 @@ IF 词在宽边界词列表 AND 在低风险上下文
 
 ## 3. 替换建议
 
-### 原句 1（行号）
-**原文**：请审查这段代码中的安全问题，只关注定义文件中的问题类型。
-**问题**：
-- "审查" (T11) → 触发主观评价
-- "问题" (T02) → 语义范围极宽
+Per trap: original sentence, identified traps with IDs, replacement sentence, reasoning.
+For non-replaceable words, apply anchoring strategies from [semantic-trap-lexicon.md](semantic-trap-lexicon.md) (前置否定清单, 输出格式硬约束, 反例强化).
 
-**替换后**：请检查这段代码中的安全漏洞，只关注定义文件中的漏洞类型。
+## 4. 优先级
 
-**替换理由**：
-- "检查"仅触发通过/不通过的客观判定
-- "漏洞"具有明确的二元判定标准
-
-## 4. 边界锚定建议
-
-对于无法替换的宽边界词，采用以下策略：
-
-### 策略 1：前置否定清单
-[具体代码示例]
-
-### 策略 2：输出格式硬约束
-[具体JSON/Markdown格式示例]
-
-### 策略 3：判定示例的反例强化
-[具体反例内容]
-
-## 5. 优先级建议
-
-按以下优先级处理：
-1. [ ] 立即修复：所有高危陷阱
-2. [ ] 尽快修复：中危陷阱
-3. [ ] 可选优化：低危陷阱和疑似陷阱
+1. 立即修复：所有高危陷阱
+2. 尽快修复：中危陷阱
+3. 可选优化：低危陷阱和疑似陷阱
 ```
 
 #### 4.2 输出要求
@@ -272,31 +218,6 @@ IF 词在宽边界词列表 AND 在低风险上下文
 
 ---
 
-## 使用指南
-
-### 基本用法
-
-```
-"请检测 /path/to/SKILL.md 文件中的语义陷阱"
-```
-
-### 高级选项
-
-**仅检测特定类别**：
-```
-"请仅检测 SKILL.md 中的动作指令类陷阱"
-```
-
-**包含引用文件**：
-```
-"请检测 SKILL.md 及其引用的所有 .md 定义文件"
-```
-
-**生成详细报告**：
-```
-"请检测并生成完整的替换建议和锚定方案"
-```
-
 ---
 
 ## 约束与规则
@@ -306,34 +227,6 @@ IF 词在宽边界词列表 AND 在低风险上下文
 3. **词典依赖**：所有判定必须基于词典，不得凭空推断
 4. **上下文敏感**：必须结合上下文角色判定风险等级
 5. **可操作性**：所有建议必须具体可执行，不能是模糊的"优化建议"
-
----
-
-## 词典维护
-
-当发现新的语义陷阱时，按以下格式添加到 `semantic-trap-lexicon.md`：
-
-```markdown
-### TXX: [窄边界词] vs [宽边界词]
-- **窄边界词**: [词] ✅
-- **宽边界词**: [词] ⚠️
-- **语义宽度差**: 小/中/大/极大
-- **典型失控场景**: [描述]
-- **示例对比**:
-  - ❌ 错误: [示例]
-  - ✅ 正确: [示例]
-```
-
----
-
-## 理论来源
-
-本检测器基于以下研究成果：
-
-- **论文**：《别让大模型"想太多"：SKILL开发中的语义陷阱与抗幻觉设计》
-- **作者**：SummerSec
-- **实验数据**：56个营销接口测试集，27个百分点的准确率差异验证
-- **核心发现**：语义边界控制比传统 Prompt Engineering 更为根本
 
 ---
 
@@ -348,39 +241,3 @@ IF 词在宽边界词列表 AND 在低风险上下文
 - [ ] 识别所有结构性风险模式
 - [ ] 生成符合格式的 Final Answer
 - [ ] 每个陷阱都有可执行建议
-
-### 常见问题
-
-**Q: 为什么"漏洞"比"风险"好？**
-A: "漏洞"具有明确的二元判定标准（存在/不存在），而"风险"本质上是程度性问题（高/中/低），会触发发散性思考。
-
-**Q: 所有宽边界词都必须替换吗？**
-A: 不是。如果业务要求必须使用某个词，可以采用边界锚定策略（否定清单、硬约束、反例）。
-
-**Q: 如何验证检测效果？**
-A: 使用"最小对比测试"——在已知答案的标准测试用例上运行 Skill，检查是否包含超出范围的内容。
-
----
-
-## 版本历史
-
-- **v1.0** (2026-03-08): 初始版本，基于语义陷阱理论框架
-  - 实现四步检测工作流
-  - 收录17组中文词汇对 + 10组英文词汇对
-  - 支持结构性风险模式识别
-  - 提供边界锚定策略
-
----
-
-## 许可与引用
-
-本 Skill 开源遵循 MIT 许可证。如使用本检测器产生学术或商业价值，请引用原始论文：
-
-```
-@article{summersec2026semantic,
-  title={别让大模型"想太多"：SKILL开发中的语义陷阱与抗幻觉设计},
-  author={SummerSec},
-  year={2026},
-  publisher={WgpSec狼组安全团队}
-}
-```
